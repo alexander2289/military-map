@@ -3,185 +3,341 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта ВС РФ — Оперативная аналитика</title>
-    <!-- Leaflet CSS -->
+    <title>Оперативная карта ВС РФ — РП Штаб</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; padding: 0; display: flex; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121216; color: #e0e0e6; }
-        #sidebar { width: 350px; height: 100vh; background: #1a1a20; border-right: 1px solid #2a2a35; padding: 20px; box-sizing: border-box; overflow-y: auto; z-index: 1000; }
+        #sidebar { width: 360px; height: 100vh; background: #1a1a20; border-right: 1px solid #2a2a35; padding: 20px; box-sizing: border-box; overflow-y: auto; z-index: 1000; }
         #map { flex-grow: 1; height: 100vh; }
         h2 { font-size: 18px; margin-top: 0; color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px; }
-        .filter-section { margin-bottom: 20px; }
+        .filter-section { margin-bottom: 18px; }
         .filter-section label { display: block; margin-bottom: 6px; font-size: 13px; cursor: pointer; color: #b0b0bc; }
         .filter-section input { margin-right: 8px; }
-        select { width: 100%; padding: 8px; background: #252530; color: #fff; border: 1px solid #3a3a48; border-radius: 4px; margin-bottom: 15px; }
-        #info-box { background: #22222b; padding: 12px; border-radius: 6px; border: 1px solid #333342; font-size: 13px; margin-top: 20px; }
+        select { width: 100%; padding: 8px; background: #252530; color: #fff; border: 1px solid #3a3a48; border-radius: 4px; margin-bottom: 12px; }
+        #info-box, #ruler-box { background: #22222b; padding: 12px; border-radius: 6px; border: 1px solid #333342; font-size: 13px; margin-top: 15px; }
         .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #1a1a20; color: #e0e0e6; border: 1px solid #333342; }
+        .leaflet-tile { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3); }
+        .legend-item { display: flex; align-items: center; margin-bottom: 4px; font-size: 12px; }
+        .color-box { width: 12px; height: 12px; margin-right: 8px; border-radius: 2px; }
         
-        /* Автоматический темный режим для тайлов карты без API-ключей */
-        .leaflet-tile {
-            filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3);
-        }
+        /* Кнопки тактической линейки */
+        .btn { width: 100%; padding: 9px; font-size: 13px; font-weight: 600; border: none; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+        .btn-ruler { background: #2b3a4a; color: #70b4ff; border: 1px solid #3d5a80; }
+        .btn-ruler.active { background: #d90429; color: #fff; border-color: #ef233c; }
+        .btn-clear { background: #2b2b36; color: #aaa; margin-top: 6px; border: 1px solid #3a3a48; }
+        .btn-clear:hover { background: #3a3a48; color: #fff; }
+        .calc-row { display: flex; justify-content: space-between; margin-top: 5px; font-size: 12px; }
+        .calc-val { color: #ffaa00; font-family: monospace; }
+        .measuring-mode { cursor: crosshair !important; }
     </style>
 </head>
 <body>
 
     <div id="sidebar">
-        <h2>Оперативная карта ВС РФ</h2>
+        <h2>Оперативный штаб ВС РФ</h2>
         
         <div class="filter-section">
-            <label>Военный округ / Флот:</label>
-            <select id="districtFilter" onchange="updateMarkers()">
-                <option value="all">Все округа и флоты</option>
-                <option value="Северный флот">Северный флот</option>
-                <option value="Тихоокеанский флот">Тихоокеанский флот</option>
-                <option value="Ленинградский военный округ (ЛВО)">Ленинградский военный округ (ЛВО)</option>
-                <option value="Московский военный округ (МВО)">Московский военный округ (МВО)</option>
-                <option value="Южный военный округ (ЮВО)">Южный военный округ (ЮВО)</option>
-                <option value="Центральный военный округ (ЦВО)">Центральный военный округ (ЦВО)</option>
-                <option value="Восточный военный округ (ВВО)">Восточный военный округ (ВВО)</option>
+            <label><b>Категория / Папка:</b></label>
+            <select id="folderFilter" onchange="renderMarkers()">
+                <option value="all">Все папки и объекты</option>
             </select>
         </div>
 
         <div class="filter-section">
-            <label>Род войск:</label>
-            <label><input type="checkbox" class="branch-cb" value="Сухопутные" checked onchange="updateMarkers()"> Сухопутные</label>
-            <label><input type="checkbox" class="branch-cb" value="Военно-морские" checked onchange="updateMarkers()"> Военно-морские</label>
-            <label><input type="checkbox" class="branch-cb" value="Береговые" checked onchange="updateMarkers()"> Береговые</label>
-            <label><input type="checkbox" class="branch-cb" value="ВКС (только авиация)" checked onchange="updateMarkers()"> ВКС (только авиация)</label>
-            <label><input type="checkbox" class="branch-cb" value="ПВО" checked onchange="updateMarkers()"> ПВО</label>
-            <label><input type="checkbox" class="branch-cb" value="ВДВ" checked onchange="updateMarkers()"> ВДВ</label>
-            <label><input type="checkbox" class="branch-cb" value="ССО" checked onchange="updateMarkers()"> ССО</label>
+            <label><input type="checkbox" id="showRadii" checked onchange="renderMarkers()"> <b>Отображать боевые радиусы</b></label>
+            <div style="margin-top: 8px;">
+                <div class="legend-item"><div class="color-box" style="background: rgba(255, 68, 68, 0.6);"></div> БРК «Бастион» (350 км)</div>
+                <div class="legend-item"><div class="color-box" style="background: rgba(255, 170, 0, 0.6);"></div> ЗРС С-400 (400 км)</div>
+                <div class="legend-item"><div class="color-box" style="background: rgba(255, 187, 51, 0.6);"></div> ЗРС С-300 / ПВО (150 км)</div>
+            </div>
         </div>
 
-        <div class="filter-section" style="border-top: 1px solid #333; padding-top: 15px;">
-            <label><input type="checkbox" id="showRadii" checked onchange="updateMarkers()"> <b>Отображать зоны поражения (ПВО / БРК)</b></label>
+        <!-- ТАКТИЧЕСКАЯ ЛИНЕЙКА -->
+        <div class="filter-section" style="border-top: 1px solid #333; padding-top: 14px;">
+            <label><b>Инструменты штаба:</b></label>
+            <button id="toggleRulerBtn" class="btn btn-ruler" onclick="toggleRulerMode()">📏 Включить линейку подлета</button>
+            <button id="clearRulerBtn" class="btn btn-clear" onclick="clearRuler()" style="display: none;">Сбросить замер</button>
+            
+            <div id="ruler-box" style="display: none;">
+                <b style="color: #70b4ff;">Баллистический расчет:</b>
+                <div class="calc-row"><span>Дистанция:</span> <span class="calc-val" id="res-dist">0 км</span></div>
+                <div class="calc-row"><span>В морских милях:</span> <span class="calc-val" id="res-nm">0 NM</span></div>
+                <hr style="border: 0; border-top: 1px solid #3a3a48; margin: 8px 0;">
+                <div style="font-size: 11px; color: #888; margin-bottom: 4px;">РАСЧЕТНОЕ ПОДЛЕТНОЕ ВРЕМЯ:</div>
+                <div class="calc-row"><span>ПКР «Оникс» (Мах 2.6):</span> <span class="calc-val" id="time-onyx">--</span></div>
+                <div class="calc-row"><span>КР «Калибр» / Х-101:</span> <span class="calc-val" id="time-kalibr">--</span></div>
+                <div class="calc-row"><span>МиГ-31БМ (форсаж):</span> <span class="calc-val" id="time-mig">--</span></div>
+            </div>
         </div>
 
         <div id="info-box">
-            <b>Выбранный объект:</b>
-            <p id="selected-title">Кликните по маркеру на карте.</p>
+            <b>Информация об объекте:</b>
+            <div id="selected-desc" style="margin-top: 6px; color: #a0a0b0;">Кликните по базе на карте для просмотра данных.</div>
         </div>
     </div>
 
     <div id="map"></div>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const map = L.map('map', { zoomControl: false }).setView([62.0, 90.0], 3);
+        const map = L.map('map', { zoomControl: false }).setView([65.0, 60.0], 4);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        // Используем стандартные открытые тайлы без каких-либо API-ключей
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 18,
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
         let layerGroup = L.layerGroup().addTo(map);
-        let allFeatures = [];
+        let rulerLayerGroup = L.layerGroup().addTo(map);
+        let parsedBases = [];
 
-        function classify(properties) {
-            const text = ((properties.title || "") + " " + (properties.description || "")).toLowerCase();
-            
-            let district = "Центральное подчинение / Другие";
-            if (text.includes("северн") || text.includes("гаджиев") || text.includes("видяев") || text.includes("североморск") || text.includes("полярн")) district = "Северный флот";
-            else if (text.includes("тихоокеанск") || text.includes("камчатк") || text.includes("владивосток") || text.includes("тоф") || text.includes("большой камень")) district = "Тихоокеанский флот";
-            else if (text.includes("черноморск") || text.includes("севастополь") || text.includes("крым") || text.includes("новороссийск")) district = "Черноморский флот";
-            else if (text.includes("балтийск") || text.includes("калининград")) district = "Балтийский флот";
-            else if (text.includes("ленинградск") || text.includes("печенг")) district = "Ленинградский военный округ (ЛВО)";
-            else if (text.includes("московск")) district = "Московский военный округ (МВО)";
-            else if (text.includes("южн")) district = "Южный военный округ (ЮВО)";
-            else if (text.includes("центральн")) district = "Центральный военный округ (ЦВО)";
-            else if (text.includes("восточн")) district = "Восточный военный округ (ВВО)";
+        // Переменные тактической линейки
+        let rulerActive = false;
+        let rulerPoints = [];
 
-            let branch = "Сухопутные";
-            if (text.includes("вдв") || text.includes("десантн")) branch = "ВДВ";
-            else if (text.includes("спн") || text.includes("спецназ")) branch = "ССО";
-            else if (text.includes("пво") || text.includes("зенитн") || text.includes("с-400") || text.includes("с-300")) branch = "ПВО";
-            else if (text.includes("авиа") || text.includes("вкс") || text.includes("вертолет") || text.includes("истребит") || text.includes("бомбард") || text.includes("аэродром")) branch = "ВКС (только авиация)";
-            else if (text.includes("берегов") || text.includes("брк") || text.includes("бастион") || text.includes("морской пехот")) branch = "Береговые";
-            else if (text.includes("флот") || text.includes("подводн") || text.includes("корабл")) branch = "Военно-морские";
-            
-            return { district, branch, text };
-        }
-
-        fetch('./units.geojson')
-            .then(response => {
-                if (!response.ok) throw new Error("HTTP error " + response.status);
-                return response.json();
+        fetch('./my_bases.kml')
+            .then(res => {
+                if (!res.ok) throw new Error("HTTP error " + res.status);
+                return res.text();
             })
-            .then(data => {
-                console.log("Успешно загружено объектов:", data.features.length);
-                allFeatures = data.features;
-                updateMarkers();
+            .then(kmlText => {
+                parseKML(kmlText);
+                populateFolderFilter();
+                renderMarkers();
             })
-            .catch(err => console.error("Ошибка загрузки units.geojson:", err));
-
-        function updateMarkers() {
-            layerGroup.clearLayers();
-
-            const selectedDistrict = document.getElementById('districtFilter').value;
-            const activeBranches = Array.from(document.querySelectorAll('.branch-cb:checked')).map(cb => cb.value);
-            const showRadii = document.getElementById('showRadii').checked;
-
-            const filteredFeatures = allFeatures.filter(feature => {
-                const { district, branch } = classify(feature.properties);
-                const matchDistrict = (selectedDistrict === 'all' || district === selectedDistrict);
-                const matchBranch = activeBranches.includes(branch);
-                return matchDistrict && matchBranch;
+            .catch(err => {
+                console.error("my_bases.kml не найден:", err);
+                document.getElementById('selected-desc').innerHTML = "<span style='color:red;'>Загрузите my_bases.kml рядом с index.html.</span>";
             });
 
-            filteredFeatures.forEach(feature => {
-                const coords = feature.geometry.coordinates;
-                const latlng = [coords[1], coords[0]];
-                const props = feature.properties;
-                const { branch, text } = classify(props);
+        function parseKML(text) {
+            const xml = new DOMParser().parseFromString(text, 'text/xml');
+            const placemarks = xml.getElementsByTagName('Placemark');
 
-                if (showRadii) {
-                    let radiusMeters = 0;
-                    let circleColor = '#3388ff';
+            for (let pm of placemarks) {
+                const name = pm.getElementsByTagName('name')[0]?.textContent || "Объект";
+                const desc = pm.getElementsByTagName('description')[0]?.textContent || "";
+                
+                let folderName = "Общие";
+                if (pm.parentElement && pm.parentElement.tagName === 'Folder') {
+                    folderName = pm.parentElement.getElementsByTagName('name')[0]?.textContent || "Общие";
+                }
 
-                    if (text.includes("с-400") || text.includes("триумф")) {
-                        radiusMeters = 400000;
-                        circleColor = '#ffaa00';
-                    } else if (text.includes("с-300") || branch === "ПВО") {
-                        radiusMeters = 150000;
-                        circleColor = '#ffbb33';
-                    } else if (text.includes("бастион") || text.includes("брк") || branch === "Береговые") {
-                        radiusMeters = 350000;
-                        circleColor = '#ff4444';
+                // 1. Линии рубежей и границ
+                const lineNode = pm.getElementsByTagName('LineString')[0];
+                if (lineNode) {
+                    const raw = lineNode.getElementsByTagName('coordinates')[0]?.textContent.trim();
+                    if (raw) {
+                        const latlngs = raw.split(/\s+/).map(coordStr => {
+                            const [lng, lat] = coordStr.split(',').map(parseFloat);
+                            return [lat, lng];
+                        }).filter(c => !isNaN(c[0]) && !isNaN(c[1]));
+
+                        parsedBases.push({ type: 'line', name, desc, folderName, latlngs, color: '#ff4444' });
                     }
+                    continue;
+                }
 
-                    if (radiusMeters > 0) {
-                        L.circle(latlng, {
-                            radius: radiusMeters,
-                            color: circleColor,
-                            weight: 1,
-                            fillColor: circleColor,
-                            fillOpacity: 0.05
-                        }).addTo(layerGroup);
+                // 2. Полигоны оперативных зон
+                const polyNode = pm.getElementsByTagName('Polygon')[0];
+                if (polyNode) {
+                    const raw = polyNode.getElementsByTagName('coordinates')[0]?.textContent.trim();
+                    if (raw) {
+                        const latlngs = raw.split(/\s+/).map(coordStr => {
+                            const [lng, lat] = coordStr.split(',').map(parseFloat);
+                            return [lat, lng];
+                        }).filter(c => !isNaN(c[0]) && !isNaN(c[1]));
+
+                        parsedBases.push({ type: 'polygon', name, desc, folderName, latlngs, color: '#3388ff' });
                     }
+                    continue;
+                }
+
+                // 3. Точечные военные объекты
+                const coordNode = pm.getElementsByTagName('coordinates')[0];
+                if (coordNode) {
+                    const rawCoords = coordNode.textContent.trim().split(',');
+                    const lng = parseFloat(rawCoords[0]);
+                    const lat = parseFloat(rawCoords[1]);
+
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        const fullText = (name + " " + desc).toLowerCase();
+                        let radiusKm = 0;
+                        let color = "#3388ff";
+
+                        if (fullText.includes("бастион") || fullText.includes("брк")) {
+                            radiusKm = 350; color = "#ff4444";
+                        } else if (fullText.includes("с-400") || fullText.includes("триумф")) {
+                            radiusKm = 400; color = "#ffaa00";
+                        } else if (fullText.includes("с-300") || fullText.includes("пво") || fullText.includes("зрп")) {
+                            radiusKm = 150; color = "#ffbb33";
+                        } else if (fullText.includes("флот") || fullText.includes("вмб") || fullText.includes("пл")) {
+                            color = "#00d2ff";
+                        } else if (fullText.includes("авиа") || fullText.includes("вкс")) {
+                            color = "#9d4edd";
+                        }
+
+                        parsedBases.push({ type: 'point', name, desc, folderName, lat, lng, radiusKm, color });
+                    }
+                }
+            }
+        }
+
+        function populateFolderFilter() {
+            const select = document.getElementById('folderFilter');
+            const folders = [...new Set(parsedBases.map(b => b.folderName))];
+            folders.forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f;
+                opt.textContent = f;
+                select.appendChild(opt);
+            });
+        }
+
+        function renderMarkers() {
+            layerGroup.clearLayers();
+            const selectedFolder = document.getElementById('folderFilter').value;
+            const showRadii = document.getElementById('showRadii').checked;
+
+            const visible = parsedBases.filter(b => selectedFolder === 'all' || b.folderName === selectedFolder);
+
+            visible.forEach(b => {
+                if (b.type === 'line') {
+                    const line = L.polyline(b.latlngs, { color: b.color, weight: 2, dashArray: '6, 6' }).addTo(layerGroup);
+                    line.bindPopup(`<b>${b.name}</b><br>${b.desc}`);
+                    return;
+                }
+
+                if (b.type === 'polygon') {
+                    const poly = L.polygon(b.latlngs, { color: b.color, weight: 1.5, fillColor: b.color, fillOpacity: 0.12 }).addTo(layerGroup);
+                    poly.bindPopup(`<b>${b.name}</b><br>${b.desc}`);
+                    return;
+                }
+
+                const latlng = [b.lat, b.lng];
+
+                if (showRadii && b.radiusKm > 0) {
+                    L.circle(latlng, {
+                        radius: b.radiusKm * 1000,
+                        color: b.color,
+                        weight: 1.5,
+                        dashArray: '4, 4',
+                        fillColor: b.color,
+                        fillOpacity: 0.08
+                    }).addTo(layerGroup);
                 }
 
                 const marker = L.circleMarker(latlng, {
-                    radius: 5,
-                    fillColor: branch === "ПВО" ? '#ffaa00' : (branch === "Береговые" ? '#ff4444' : '#3388ff'),
-                    color: "#fff",
-                    weight: 1,
-                    fillOpacity: 0.9
+                    radius: 6,
+                    fillColor: b.color,
+                    color: '#ffffff',
+                    weight: 1.5,
+                    fillOpacity: 0.95
                 });
 
-                const title = props.title || "Военный объект";
-                const desc = props.description || "Описание отсутствует.";
-                marker.bindPopup(`<b>${title}</b><br><br>${desc}`);
+                marker.bindPopup(`<b>${b.name}</b><br><small style="color:#aaa;">Папка: ${b.folderName}</small><hr style="border:0;border-top:1px solid #444;margin:6px 0;">${b.desc}`);
 
                 marker.on('click', () => {
-                    document.getElementById('selected-title').innerHTML = `<b>${title}</b>`;
+                    if (rulerActive) return; // В режиме линейки клик обрабатывается для замера
+                    document.getElementById('selected-desc').innerHTML = `
+                        <b style="color:#fff;font-size:14px;">${b.name}</b><br>
+                        <span style="color:#3388ff;">Категория:</span> ${b.folderName}<br>
+                        ${b.radiusKm > 0 ? `<span style="color:#ffaa00;">Радиус зоны:</span> ${b.radiusKm} км<br>` : ''}
+                        <p style="margin-top:8px;line-height:1.4;">${b.desc || 'Описание отсутствует.'}</p>
+                    `;
                 });
 
                 layerGroup.addLayer(marker);
             });
+        }
+
+        // --- ЛОГИКА ТАКТИЧЕСКОЙ ЛИНЕЙКИ ---
+
+        function toggleRulerMode() {
+            rulerActive = !rulerActive;
+            const btn = document.getElementById('toggleRulerBtn');
+            const mapContainer = document.getElementById('map');
+
+            if (rulerActive) {
+                btn.classList.add('active');
+                btn.textContent = "✕ Завершить замер";
+                mapContainer.classList.add('measuring-mode');
+                document.getElementById('clearRulerBtn').style.display = 'block';
+                document.getElementById('ruler-box').style.display = 'block';
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = "📏 Включить линейку подлета";
+                mapContainer.classList.remove('measuring-mode');
+            }
+        }
+
+        function formatTime(totalSeconds) {
+            if (totalSeconds < 60) return `${Math.round(totalSeconds)} сек`;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = Math.round(totalSeconds % 60);
+            return `${minutes} мин ${seconds} сек`;
+        }
+
+        map.on('click', function(e) {
+            if (!rulerActive) return;
+
+            if (rulerPoints.length >= 2) {
+                clearRuler();
+            }
+
+            rulerPoints.push(e.latlng);
+
+            // Метка точки клика
+            const pMarker = L.circleMarker(e.latlng, {
+                radius: 5,
+                fillColor: '#70b4ff',
+                color: '#fff',
+                weight: 2,
+                fillOpacity: 1
+            }).addTo(rulerLayerGroup);
+
+            if (rulerPoints.length === 2) {
+                const p1 = rulerPoints[0];
+                const p2 = rulerPoints[1];
+
+                // Отрисовка траектории
+                L.polyline([p1, p2], {
+                    color: '#70b4ff',
+                    weight: 2,
+                    dashArray: '5, 8'
+                }).addTo(rulerLayerGroup);
+
+                // Расчет дистанции
+                const distanceMeters = p1.distanceTo(p2);
+                const distKm = distanceMeters / 1000;
+                const distNM = distKm / 1.852;
+
+                document.getElementById('res-dist').textContent = `${distKm.toFixed(1)} км`;
+                document.getElementById('res-nm').textContent = `${distNM.toFixed(1)} NM`;
+
+                // Скорости:
+                // Оникс: ~3180 км/ч (883 м/с)
+                // Калибр: ~850 км/ч (236 м/с)
+                // МиГ-31: ~2500 км/ч (694 м/с)
+                const secOnyx = distanceMeters / 883.3;
+                const secKalibr = distanceMeters / 236.1;
+                const secMig = distanceMeters / 694.4;
+
+                document.getElementById('time-onyx').textContent = formatTime(secOnyx);
+                document.getElementById('time-kalibr').textContent = formatTime(secKalibr);
+                document.getElementById('time-mig').textContent = formatTime(secMig);
+            }
+        });
+
+        function clearRuler() {
+            rulerPoints = [];
+            rulerLayerGroup.clearLayers();
+            document.getElementById('res-dist').textContent = "0 км";
+            document.getElementById('res-nm').textContent = "0 NM";
+            document.getElementById('time-onyx').textContent = "--";
+            document.getElementById('time-kalibr').textContent = "--";
+            document.getElementById('time-mig').textContent = "--";
         }
     </script>
 </body>
