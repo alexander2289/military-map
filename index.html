@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта ВС РФ — Зоны поражения и радиусы</title>
+    <title>Карта ВС РФ — Оперативная аналитика</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; padding: 0; display: flex; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121216; color: #e0e0e6; }
-        #sidebar { width: 350px; height: 100vh; background: #1a1a20; border-right: 1px solid #2a2a35; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        #sidebar { width: 350px; height: 100vh; background: #1a1a20; border-right: 1px solid #2a2a35; padding: 20px; box-sizing: border-box; overflow-y: auto; z-index: 1000; }
         #map { flex-grow: 1; height: 100vh; }
         h2 { font-size: 18px; margin-top: 0; color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px; }
         .filter-section { margin-bottom: 20px; }
@@ -17,6 +17,11 @@
         select { width: 100%; padding: 8px; background: #252530; color: #fff; border: 1px solid #3a3a48; border-radius: 4px; margin-bottom: 15px; }
         #info-box { background: #22222b; padding: 12px; border-radius: 6px; border: 1px solid #333342; font-size: 13px; margin-top: 20px; }
         .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #1a1a20; color: #e0e0e6; border: 1px solid #333342; }
+        
+        /* Автоматический темный режим для тайлов карты без API-ключей */
+        .leaflet-tile {
+            filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3);
+        }
     </style>
 </head>
 <body>
@@ -67,9 +72,10 @@
         const map = L.map('map', { zoomControl: false }).setView([62.0, 90.0], 3);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        // Используем стандартные открытые тайлы без каких-либо API-ключей
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 18,
-            attribution: '&copy; OpenStreetMap &copy; CARTO'
+            attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
         let layerGroup = L.layerGroup().addTo(map);
@@ -123,25 +129,24 @@
             });
 
             filteredFeatures.forEach(feature => {
-                const coords = feature.geometry.coordinates; // [lng, lat]
+                const coords = feature.geometry.coordinates;
                 const latlng = [coords[1], coords[0]];
                 const props = feature.properties;
                 const { branch, text } = classify(props);
 
-                // Отрисовка радиусов поражения, если включено
                 if (showRadii) {
                     let radiusMeters = 0;
                     let circleColor = '#3388ff';
 
                     if (text.includes("с-400") || text.includes("триумф")) {
-                        radiusMeters = 400000; // 400 км
-                        circleColor = '#ffaa00'; // Оранжевый для ПВО дальнего действия
+                        radiusMeters = 400000;
+                        circleColor = '#ffaa00';
                     } else if (text.includes("с-300") || branch === "ПВО") {
-                        radiusMeters = 150000; // 150 км
+                        radiusMeters = 150000;
                         circleColor = '#ffbb33';
                     } else if (text.includes("бастион") || text.includes("брк") || branch === "Береговые") {
-                        radiusMeters = 350000; // 350 км для Ониксов
-                        circleColor = '#ff4444'; // Красный для береговых ракетных комплексов
+                        radiusMeters = 350000;
+                        circleColor = '#ff4444';
                     }
 
                     if (radiusMeters > 0) {
@@ -155,7 +160,6 @@
                     }
                 }
 
-                // Маркер точки на карте
                 const marker = L.circleMarker(latlng, {
                     radius: 5,
                     fillColor: branch === "ПВО" ? '#ffaa00' : (branch === "Береговые" ? '#ff4444' : '#3388ff'),
