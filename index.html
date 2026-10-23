@@ -106,9 +106,13 @@
             return { district, branch, text };
         }
 
-        fetch('units.geojson')
-            .then(response => response.json())
+        fetch('./units.geojson')
+            .then(response => {
+                if (!response.ok) throw new Error("HTTP error " + response.status);
+                return response.json();
+            })
             .then(data => {
+                console.log("Успешно загружено объектов:", data.features.length);
                 allFeatures = data.features;
                 updateMarkers();
             })
