@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Карта ВС РФ — Зоны поражения и радиусы</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; display: flex; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121216; color: #e0e0e6; }
+        #sidebar { width: 350px; height: 100vh; background: #1a1a20; border-right: 1px solid #2a2a35; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        #map { flex-grow: 1; height: 100vh; }
+        h2 { font-size: 18px; margin-top: 0; color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .filter-section { margin-bottom: 20px; }
+        .filter-section label { display: block; margin-bottom: 6px; font-size: 13px; cursor: pointer; color: #b0b0bc; }
+        .filter-section input { margin-right: 8px; }
+        select { width: 100%; padding: 8px; background: #252530; color: #fff; border: 1px solid #3a3a48; border-radius: 4px; margin-bottom: 15px; }
+        #info-box { background: #22222b; padding: 12px; border-radius: 6px; border: 1px solid #333342; font-size: 13px; margin-top: 20px; }
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #1a1a20; color: #e0e0e6; border: 1px solid #333342; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>Оперативная карта ВС РФ</h2>
+        
+        <div class="filter-section">
+            <label>Военный округ / Флот:</label>
+            <select id="districtFilter" onchange="updateMarkers()">
+                <option value="all">Все округа и флоты</option>
+                <option value="Северный флот">Северный флот</option>
+                <option value="Тихоокеанский флот">Тихоокеанский флот</option>
+                <option value="Ленинградский военный округ (ЛВО)">Ленинградский военный округ (ЛВО)</option>
+                <option value="Московский военный округ (МВО)">Московский военный округ (МВО)</option>
+                <option value="Южный военный округ (ЮВО)">Южный военный округ (ЮВО)</option>
+                <option value="Центральный военный округ (ЦВО)">Центральный военный округ (ЦВО)</option>
+                <option value="Восточный военный округ (ВВО)">Восточный военный округ (ВВО)</option>
+            </select>
+        </div>
+
+        <div class="filter-section">
+            <label>Род войск:</label>
+            <label><input type="checkbox" class="branch-cb" value="Сухопутные" checked onchange="updateMarkers()"> Сухопутные</label>
+            <label><input type="checkbox" class="branch-cb" value="Военно-морские" checked onchange="updateMarkers()"> Военно-морские</label>
+            <label><input type="checkbox" class="branch-cb" value="Береговые" checked onchange="updateMarkers()"> Береговые</label>
+            <label><input type="checkbox" class="branch-cb" value="ВКС (только авиация)" checked onchange="updateMarkers()"> ВКС (только авиация)</label>
+            <label><input type="checkbox" class="branch-cb" value="ПВО" checked onchange="updateMarkers()"> ПВО</label>
+            <label><input type="checkbox" class="branch-cb" value="ВДВ" checked onchange="updateMarkers()"> ВДВ</label>
+            <label><input type="checkbox" class="branch-cb" value="ССО" checked onchange="updateMarkers()"> ССО</label>
+        </div>
+
+        <div class="filter-section" style="border-top: 1px solid #333; padding-top: 15px;">
+            <label><input type="checkbox" id="showRadii" checked onchange="updateMarkers()"> <b>Отображать зоны поражения (ПВО / БРК)</b></label>
+        </div>
+
+        <div id="info-box">
+            <b>Выбранный объект:</b>
+            <p id="selected-title">Кликните по маркеру на карте.</p>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map', { zoomControl: false }).setView([62.0, 90.0], 3);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 18,
+            attribution: '&copy; OpenStreetMap &copy; CARTO'
+        }).addTo(map);
+
+        let layerGroup = L.layerGroup().addTo(map);
+        let allFeatures = [];
+
+        function classify(properties) {
+            const text = ((properties.title || "") + " " + (properties.description || "")).toLowerCase();
+            
+            let district = "Центральное подчинение / Другие";
+            if (text.includes("северн") || text.includes("гаджиев") || text.includes("видяев") || text.includes("североморск") || text.includes("полярн")) district = "Северный флот";
+            else if (text.includes("тихоокеанск") || text.includes("камчатк") || text.includes("владивосток") || text.includes("тоф") || text.includes("большой камень")) district = "Тихоокеанский флот";
+            else if (text.includes("черноморск") || text.includes("севастополь") || text.includes("крым") || text.includes("новороссийск")) district = "Черноморский флот";
+            else if (text.includes("балтийск") || text.includes("калининград")) district = "Балтийский флот";
+            else if (text.includes("ленинградск") || text.includes("печенг")) district = "Ленинградский военный округ (ЛВО)";
+            else if (text.includes("московск")) district = "Московский военный округ (МВО)";
+            else if (text.includes("южн")) district = "Южный военный округ (ЮВО)";
+            else if (text.includes("центральн")) district = "Центральный военный округ (ЦВО)";
+            else if (text.includes("восточн")) district = "Восточный военный округ (ВВО)";
+
+            let branch = "Сухопутные";
+            if (text.includes("вдв") || text.includes("десантн")) branch = "ВДВ";
+            else if (text.includes("спн") || text.includes("спецназ")) branch = "ССО";
+            else if (text.includes("пво") || text.includes("зенитн") || text.includes("с-400") || text.includes("с-300")) branch = "ПВО";
+            else if (text.includes("авиа") || text.includes("вкс") || text.includes("вертолет") || text.includes("истребит") || text.includes("бомбард") || text.includes("аэродром")) branch = "ВКС (только авиация)";
+            else if (text.includes("берегов") || text.includes("брк") || text.includes("бастион") || text.includes("морской пехот")) branch = "Береговые";
+            else if (text.includes("флот") || text.includes("подводн") || text.includes("корабл")) branch = "Военно-морские";
+            
+            return { district, branch, text };
+        }
+
+        fetch('units.geojson')
+            .then(response => response.json())
+            .then(data => {
+                allFeatures = data.features;
+                updateMarkers();
+            })
+            .catch(err => console.error("Ошибка загрузки units.geojson:", err));
+
+        function updateMarkers() {
+            layerGroup.clearLayers();
+
+            const selectedDistrict = document.getElementById('districtFilter').value;
+            const activeBranches = Array.from(document.querySelectorAll('.branch-cb:checked')).map(cb => cb.value);
+            const showRadii = document.getElementById('showRadii').checked;
+
+            const filteredFeatures = allFeatures.filter(feature => {
+                const { district, branch } = classify(feature.properties);
+                const matchDistrict = (selectedDistrict === 'all' || district === selectedDistrict);
+                const matchBranch = activeBranches.includes(branch);
+                return matchDistrict && matchBranch;
+            });
+
+            filteredFeatures.forEach(feature => {
+                const coords = feature.geometry.coordinates; // [lng, lat]
+                const latlng = [coords[1], coords[0]];
+                const props = feature.properties;
+                const { branch, text } = classify(props);
+
+                // Отрисовка радиусов поражения, если включено
+                if (showRadii) {
+                    let radiusMeters = 0;
+                    let circleColor = '#3388ff';
+
+                    if (text.includes("с-400") || text.includes("триумф")) {
+                        radiusMeters = 400000; // 400 км
+                        circleColor = '#ffaa00'; // Оранжевый для ПВО дальнего действия
+                    } else if (text.includes("с-300") || branch === "ПВО") {
+                        radiusMeters = 150000; // 150 км
+                        circleColor = '#ffbb33';
+                    } else if (text.includes("бастион") || text.includes("брк") || branch === "Береговые") {
+                        radiusMeters = 350000; // 350 км для Ониксов
+                        circleColor = '#ff4444'; // Красный для береговых ракетных комплексов
+                    }
+
+                    if (radiusMeters > 0) {
+                        L.circle(latlng, {
+                            radius: radiusMeters,
+                            color: circleColor,
+                            weight: 1,
+                            fillColor: circleColor,
+                            fillOpacity: 0.05
+                        }).addTo(layerGroup);
+                    }
+                }
+
+                // Маркер точки на карте
+                const marker = L.circleMarker(latlng, {
+                    radius: 5,
+                    fillColor: branch === "ПВО" ? '#ffaa00' : (branch === "Береговые" ? '#ff4444' : '#3388ff'),
+                    color: "#fff",
+                    weight: 1,
+                    fillOpacity: 0.9
+                });
+
+                const title = props.title || "Военный объект";
+                const desc = props.description || "Описание отсутствует.";
+                marker.bindPopup(`<b>${title}</b><br><br>${desc}`);
+
+                marker.on('click', () => {
+                    document.getElementById('selected-title').innerHTML = `<b>${title}</b>`;
+                });
+
+                layerGroup.addLayer(marker);
+            });
+        }
+    </script>
+</body>
+</html>
